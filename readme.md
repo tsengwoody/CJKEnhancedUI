@@ -32,6 +32,8 @@ There are three modes: "Off", "On", and "Auto".
 
 For "On" and "Auto" mode, typing into the input composition window automatically displays character descriptions for single characters.
 
-## Other
+## update log
 
-Fix bug(Pressing numPad2 can't speak current character) by Tseng Woody <tsengwoody.tw@gmail.com>
+v1.2.1: Fix bug(Pressing numPad2 can't speak current character) by Tseng Woody.
+
+v1.3: Upgrading to compatible with NVDA 2019.3 and Python 3 by Tseng Woody.
