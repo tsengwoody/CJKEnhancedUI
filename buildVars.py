@@ -21,15 +21,15 @@ addon_info = {
 	# version
 	"addon_version" : "1.3",
 	# Author(s)
-	"addon_author" : u"Michael M Chen <nvda.conceptsphere@gmail.com>; 蔡宗豪 Victor Cai <surfer0627@gmail.com>",
+	"addon_author" : u"Michael M Chen <nvda.conceptsphere@gmail.com>; 蔡宗豪 Victor Cai <surfer0627@gmail.com>; Tseng Woody <tsengwoody.tw@gmail.com>",
 	# URL for the add-on documentation support
 	"addon_url" : None,
 	# Documentation file name
 	"addon_docFileName" : "readme.html",
 	# Minimum NVDA version supported (e.g. "2018.3.0", minor version is optional)
-	"addon_minimumNVDAVersion" : "2017.3",
+	"addon_minimumNVDAVersion" : "2019.3",
 	# Last NVDA version supported/tested (e.g. "2018.4.0", ideally more recent than minimum version)
-	"addon_lastTestedNVDAVersion" : "2019.2.1",
+	"addon_lastTestedNVDAVersion" : "2019.3",
 	# Add-on update channel (default is None, denoting stable releases, and for development releases, use "dev"; do not change unless you know what you are doing)
 	"addon_updateChannel" : None,
 }
