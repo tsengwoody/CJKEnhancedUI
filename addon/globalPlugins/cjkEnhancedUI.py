@@ -1,5 +1,5 @@
 ﻿#CJKEnhancedUI.py
-#Version 1.3
+#Version 1.4
 #Customizations and enhancements by Michael M Chen <nvda.conceptsphere@gmail.com>
 #Tested by 蔡宗豪 Victor Cai <surfer0627@gmail.com>
 #A global plug-in intended for the CJK locales
@@ -17,7 +17,12 @@
 #Braille review mode auto: moving the system or review cursor within a region  of text automatically displays the character descriptions.
 #For "On" and "Auto" mode, typing into the input composition window automatically displays character descriptions for single characters.
 #####
+# version 1.4
 # Upgrading to compatible with NVDA 2019.3 and Python 3 by Tseng Woody <tsengwoody.tw@gmail.com>
+#####
+# version 1.4
+# Upgrading to compatible with NVDA 2020.1 ('getSpeechForSpelling' rename to 'getSpellingSpeech') by Tseng Woody <tsengwoody.tw@gmail.com>
+
 
 import braille
 from braille import BrailleHandler, handler
@@ -77,7 +82,7 @@ def isAlphanumeric(char):
 	else:
 		return False
 
-def custom_getSpeechForSpelling(  # noqa: C901
+def custom_getSpellingSpeech(  # noqa: C901
 		text: str,
 		locale: Optional[str] = None,
 		useCharacterDescriptions: bool = False
@@ -290,7 +295,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self.default_doCursorMove = BrailleHandler._doCursorMove
 		self.default_reportNewText = InputComposition.reportNewText
 
-		speech.getSpeechForSpelling = custom_getSpeechForSpelling
+		speech.getSpellingSpeech = custom_getSpellingSpeech
 		BrailleHandler._doCursorMove = custom_doCursorMove
 		InputComposition.reportNewText = custom_reportNewText
 
