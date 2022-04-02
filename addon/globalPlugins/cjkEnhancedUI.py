@@ -24,6 +24,8 @@
 # Upgrading to compatible with NVDA 2020.1 ('getSpeechForSpelling' rename to 'getSpellingSpeech') by Tseng Woody <tsengwoody.tw@gmail.com>
 # version 1.5
 # Upgrading to compatible with NVDA 2021.1 by Tseng Woody <tsengwoody.tw@gmail.com>
+# version 1.6
+# Upgrading to compatible with NVDA 2022.1 by Tseng Woody <tsengwoody.tw@gmail.com>
 
 import addonHandler
 import api
@@ -228,7 +230,7 @@ def custom_reportNewText(self,oldString,newString):
 		if newSpeechText:
 			queueHandler.queueFunction(queueHandler.eventQueue, ui.reviewMessage, newSpeechText)
 		elif newText:
-			queueHandler.queueFunction(queueHandler.eventQueue,speech.speakText,newText,symbolLevel=characterProcessing.SYMLVL_ALL)
+			queueHandler.queueFunction(queueHandler.eventQueue,speech.speakText,newText,symbolLevel=characterProcessing.SymbolLevel.ALL)
 
 def speechReview_getCharacterDescription(locale, character):
 	"""

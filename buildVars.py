@@ -19,7 +19,7 @@ addon_info = {
 	# Translators: Long description to be shown for this add-on on add-on information from add-ons manager
 	"addon_description" : _("Modifications and enhancements to speech and Braille output intended for CJK locales."),
 	# version
-	"addon_version" : "1.5",
+	"addon_version" : "1.6",
 	# Author(s)
 	"addon_author" : u"Michael M Chen <nvda.conceptsphere@gmail.com>; 蔡宗豪 Victor Cai <surfer0627@gmail.com>; Tseng Woody <tsengwoody.tw@gmail.com>",
 	# URL for the add-on documentation support
