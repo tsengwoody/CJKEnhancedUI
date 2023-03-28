@@ -26,6 +26,10 @@
 # Upgrading to compatible with NVDA 2021.1 by Tseng Woody <tsengwoody.tw@gmail.com>
 # version 1.6
 # Upgrading to compatible with NVDA 2022.1 by Tseng Woody <tsengwoody.tw@gmail.com>
+# version 1.7
+# Eliminate outdated code and refactor configuration code.
+# Upgrading to compatible with NVDA 2023.1 by Tseng Woody <tsengwoody.tw@gmail.com>
+
 
 import addonHandler
 import api
@@ -33,7 +37,6 @@ import braille
 from braille import BrailleHandler, handler
 import characterProcessing
 import config
-from config import conf
 import controlTypes
 import globalPluginHandler
 import keyboardHandler
@@ -47,6 +50,7 @@ import synthDriverHandler
 import textInfos
 import ui
 
+import re
 from typing import (
 	Optional,
 )
@@ -55,29 +59,9 @@ addonHandler.initTranslation()
 
 ADDON_SUMMARY = addonHandler.getCodeAddon().manifest["summary"]
 
-#Check the config file for existing version of the plug-in.
-try:
-	if conf["CJKEnhancedUI"]["version"] == "1.2":
-		#The config section is up to date, so continue initializing the plug-in.
-		pass
-	else:
-		#Maintain the config section from the previous version.
-		#the CJK["isAlphanumeric"] variable is deprecated, so reset the config section to remove it.
-		speechReview = conf["CJKEnhancedUI"]["speechReview"]
-		brailleReview = conf["CJKEnhancedUI"]["brailleReview"]
-		conf["CJKEnhancedUI"] = {}
-		conf["CJKEnhancedUI"]["version"] = "1.2"
-		conf["CJKEnhancedUI"]["speechReview"] = speechReview
-		conf["CJKEnhancedUI"]["brailleReview"] = brailleReview
-except KeyError:
-	#Either this is a fresh install, or the config section is for an older version.
-#Initialize the config section.
-	conf["CJKEnhancedUI"] = {}
-	conf["CJKEnhancedUI"]["version"] = "1.2"
-	conf["CJKEnhancedUI"]["speechReview"] = "On"	#The speech review mode is turned on by default.
-	conf["CJKEnhancedUI"]["brailleReview"] = "On"	#The Braille review mode is set to "On" by default.
+CJK = {}
 
-CJK = conf["CJKEnhancedUI"]
+pattern=re.compile("[a-zA-z]")
 
 def isAlphanumeric(char):
 	"""
@@ -88,13 +72,14 @@ def isAlphanumeric(char):
 	@rtype: boolean
 	"""
 	try:
-		c = ord(char)
+		result = pattern.match(char)
+		if result:
+			return True
+		else:
+			return False
 	except:
-		c = 0
-	if (c >= ord("a") and c <= ord("z")) or (c >= ord("A") and c <= ord("Z")):
-		return True
-	else:
 		return False
+
 
 def custom_getSpellingSpeech(  # noqa: C901
 		text: str,
@@ -128,7 +113,7 @@ def custom_getSpellingSpeech(  # noqa: C901
 			charDesc = None
 			# item is just a character.
 			speakCharAs = item
-			if CJK["speechReview"] == "Off" and useCharacterDescriptions:
+			if config.conf["CJKEnhancedUI"]["speechReview"] == "Off" and useCharacterDescriptions:
 				charDesc=characterProcessing.getCharacterDescription(locale,speakCharAs.lower())
 			else:
 				#do not speak character descriptions for alphanumeric characters unless the function is called by the review_currentCharacter method.
@@ -137,11 +122,11 @@ def custom_getSpellingSpeech(  # noqa: C901
 					#The cursor has moved, so reset the previously stored character.
 					#This allows  for a more consistent speech feedback by always speaking the phonetic spelling of alphanumeric characters first after the focus moves.
 					CJK["previousCharacter"] = ""
-				elif CJK["speechReview"] == "On":
+				elif config.conf["CJKEnhancedUI"]["speechReview"] == "On":
 					#Retrieve the character description one at a time.
 					charDesc=speechReview_getCharacterDescription(locale, speakCharAs.lower())
 
-			if charDesc and CJK["speechReview"] == "On":
+			if charDesc and config.conf["CJKEnhancedUI"]["speechReview"] == "On":
 				speakCharAs = "".join(charDesc)
 			elif charDesc:
 				IDEOGRAPHIC_COMMA = u"\u3001"
@@ -198,7 +183,7 @@ def custom_doCursorMove(self, region):
 	elif self.buffer is self.messageBuffer and keyboardHandler.keyCounter>self._keyCountForLastMessage:
 		self._dismissMessage()
 
-	if CJK["brailleReview"] == "Auto" and CJK["previousRawText"] == region.rawText and CJK["previousCursorPos"] != region.cursorPos:
+	if config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto" and CJK["previousRawText"] == region.rawText and CJK["previousCursorPos"] != region.cursorPos:
 		#The cursor is inside the raw text of the previous region and its position as moved, so display the character descriptions.
 		try:
 			i = region.cursorPos
@@ -217,12 +202,12 @@ def custom_reportNewText(self,oldString,newString):
 		newText=calculateInsertedChars(oldString.strip(u'\u3000'),newString.strip(u'\u3000'))
 		newSpeechText = None
 		newBrailleText = None
-		if CJK["speechReview"] == "On" and not isAlphanumeric(newText) and len(newText) == 1:
+		if config.conf["CJKEnhancedUI"]["speechReview"] == "On" and not isAlphanumeric(newText) and len(newText) == 1:
 			try:
 				newSpeechText = speechReview_getCharacterDescription(CJK["locale"], newText)
 			except TypeError:
 				pass
-		if (CJK["brailleReview"] == "On" or CJK["brailleReview"] == "Auto") and not isAlphanumeric(newText) and len(newText) == 1:
+		if (config.conf["CJKEnhancedUI"]["brailleReview"] == "On" or config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto") and not isAlphanumeric(newText) and len(newText) == 1:
 			try:
 				newBrailleText = newText+" "+" ".join(characterProcessing.getCharacterDescription(CJK["locale"], newText))
 			except TypeError:
@@ -252,7 +237,7 @@ def speechReview_getCharacterDescription(locale, character):
 	if not desc and not locale.startswith('en'):
 		desc=characterProcessing.getCharacterDescription('en',character)
 
-	if CJK["speechReview"] == "Off":
+	if config.conf["CJKEnhancedUI"]["speechReview"] == "Off":
 	#Perform default behavior.
 		return desc
 	if not desc:
@@ -310,11 +295,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		category=ADDON_SUMMARY,
 	)
 	def script_ToggleSpeechReview(self,gesture):
-		if CJK["speechReview"] == "Off":
-			CJK["speechReview"] = "On"
+		if config.conf["CJKEnhancedUI"]["speechReview"] == "Off":
+			config.conf["CJKEnhancedUI"]["speechReview"] = "On"
 		else:
-			CJK["speechReview"] = "Off"
-		ui.message(_("Speech review mode %s")%CJK["speechReview"])
+			config.conf["CJKEnhancedUI"]["speechReview"] = "Off"
+		ui.message(_("Speech review mode %s")%config.conf["CJKEnhancedUI"]["speechReview"])
 
 	@script(
 		gestures=["kb:nvda+="],
@@ -322,13 +307,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		category=ADDON_SUMMARY,
 	)
 	def script_ToggleBrailleReview(self,gesture):
-		if CJK["brailleReview"] == "Off":
-			CJK["brailleReview"] = "On"
-		elif CJK["brailleReview"] == "On":
-			CJK["brailleReview"] = "Auto"
+		if config.conf["CJKEnhancedUI"]["brailleReview"] == "Off":
+			config.conf["CJKEnhancedUI"]["brailleReview"] = "On"
+		elif config.conf["CJKEnhancedUI"]["brailleReview"] == "On":
+			config.conf["CJKEnhancedUI"]["brailleReview"] = "Auto"
 		else:
-			CJK["brailleReview"] = "Off"
-		ui.message(_("Braille review mode %s")%CJK["brailleReview"])
+			config.conf["CJKEnhancedUI"]["brailleReview"] = "Off"
+		ui.message(_("Braille review mode %s")%config.conf["CJKEnhancedUI"]["brailleReview"])
 
 	@script(
 		gestures=["kb:numPad1", "kb(laptop):nvda+leftarrow"],
@@ -349,7 +334,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			reviewInfo.expand(textInfos.UNIT_CHARACTER)
 			speech.speakTextInfo(reviewInfo, unit=textInfos.UNIT_CHARACTER, reason=controlTypes.OutputReason.CARET)
 			char = reviewInfo.text.lower()
-			if not isAlphanumeric(char) and CJK["brailleReview"] == "Auto":
+			if not isAlphanumeric(char) and config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto":
 				try:
 					charDesc = characterProcessing.getCharacterDescription(CJK["locale"], char)
 					BrailleHandler.message(handler, char+" "+" ".join(charDesc))
@@ -360,7 +345,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			charInfo.expand(textInfos.UNIT_CHARACTER)
 			speech.speakTextInfo(charInfo, unit=textInfos.UNIT_CHARACTER, reason=controlTypes.OutputReason.CARET)
 			char = charInfo.text.lower()
-			if not isAlphanumeric(char) and CJK["brailleReview"] == "Auto":
+			if not isAlphanumeric(char) and config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto":
 				try:
 					charDesc = characterProcessing.getCharacterDescription(CJK["locale"], char)
 					BrailleHandler.message(handler, char+" "+" ".join(charDesc))
@@ -386,7 +371,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			reviewInfo.expand(textInfos.UNIT_CHARACTER)
 			speech.speakTextInfo(reviewInfo, unit=textInfos.UNIT_CHARACTER, reason=controlTypes.OutputReason.CARET)
 			char = reviewInfo.text.lower()
-			if not isAlphanumeric(char) and CJK["brailleReview"] == "Auto":
+			if not isAlphanumeric(char) and config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto":
 				try:
 					charDesc = characterProcessing.getCharacterDescription(CJK["locale"], char)
 					BrailleHandler.message(handler, char+" "+" ".join(charDesc))
@@ -397,7 +382,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			charInfo.expand(textInfos.UNIT_CHARACTER)
 			speech.speakTextInfo(charInfo, unit=textInfos.UNIT_CHARACTER, reason=controlTypes.OutputReason.CARET)
 			char = charInfo.text.lower()
-			if not isAlphanumeric(char) and CJK["brailleReview"] == "Auto":
+			if not isAlphanumeric(char) and config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto":
 				try:
 					charDesc = characterProcessing.getCharacterDescription(CJK["locale"], char)
 					BrailleHandler.message(handler, char+" "+" ".join(charDesc))
@@ -422,13 +407,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except:
 			c=0
 
-		if count == 1 or (CJK["speechReview"] == "On" or CJK["brailleReview"] != "Off"):
+		if count == 1 or (config.conf["CJKEnhancedUI"]["speechReview"] == "On" or config.conf["CJKEnhancedUI"]["brailleReview"] != "Off"):
 			CJK["isReviewCharacter"] = True
-			if count == 1 or CJK["speechReview"] == "On":
+			if count == 1 or config.conf["CJKEnhancedUI"]["speechReview"] == "On":
 				speech.speakSpelling(info.text,useCharacterDescriptions=True)
 			else:
 				speech.speakTextInfo(info, unit=textInfos.UNIT_CHARACTER, reason=controlTypes.OutputReason.CARET)
-			if CJK["brailleReview"] == "On" or CJK["brailleReview"] == "Auto":
+			if config.conf["CJKEnhancedUI"]["brailleReview"] == "On" or config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto":
 				try:
 					char = info.text.lower()
 					charDesc = characterProcessing.getCharacterDescription(CJK["locale"], char)
