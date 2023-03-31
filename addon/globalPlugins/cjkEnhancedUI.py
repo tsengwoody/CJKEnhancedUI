@@ -29,6 +29,8 @@
 # version 1.7
 # Eliminate outdated code and refactor configuration code.
 # Upgrading to compatible with NVDA 2023.1 by Tseng Woody <tsengwoody.tw@gmail.com>
+# version 1.7.1
+# Fixing the initial config bug
 
 
 import addonHandler
@@ -58,6 +60,11 @@ from typing import (
 addonHandler.initTranslation()
 
 ADDON_SUMMARY = addonHandler.getCodeAddon().manifest["summary"]
+
+config.conf.spec["CJKEnhancedUI"] = {
+	"speechReview": "string(default=On)",
+	"brailleReview": "string(default=On)",
+}
 
 CJK = {}
 
