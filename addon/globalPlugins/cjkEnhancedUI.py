@@ -38,7 +38,7 @@
 import addonHandler
 import api
 import braille
-from braille import BrailleHandler, handler
+from braille import BrailleHandler, handler, CONTEXTPRES_CHANGEDCONTEXT, TextInfoRegion
 import characterProcessing
 import config
 from config.configFlags import (
@@ -48,6 +48,7 @@ import controlTypes
 import globalPluginHandler
 import keyboardHandler
 from languageHandler import getLanguage
+from logHandler import log
 from NVDAObjects.inputComposition import InputComposition, calculateInsertedChars
 import queueHandler
 from scriptHandler import getLastScriptRepeatCount, script
@@ -174,34 +175,45 @@ def custom_getSpellingSpeech(  # noqa: C901
 		yield EndUtteranceCommand()
 
 
-def custom_doNewObject(self, regions):
-	self.mainBuffer.clear()
-	focusToHardLeftSet = False
-	for region in regions:
-		if (
-			self.getTether() == TetherTo.FOCUS.value
-			and config.conf["braille"]["focusContextPresentation"] == CONTEXTPRES_CHANGEDCONTEXT
+def customer_handlePendingUpdate(self):
+	"""When any region is pending an update, updates the region and the braille display.
+	"""
+	if not self._regionsPendingUpdate:
+		return
+	try:
+		scrollTo: Optional[TextInfoRegion] = None
+		self.mainBuffer.saveWindow()
+		for region in self._regionsPendingUpdate:
+			from treeInterceptorHandler import TreeInterceptor
+			if isinstance(region.obj, TreeInterceptor) and not region.obj.isAlive:
+				log.debug("Skipping region update for died tree interceptor")
+				continue
+			try:
+				region.update()
+			except Exception:
+				log.debugWarning(
+					f"Region update failed for {region}, object probably died",
+					exc_info=True
+				)
+				continue
+			if isinstance(region, TextInfoRegion) and region.pendingCaretUpdate:
+				scrollTo = region
+				region.pendingCaretUpdate = False
+		self.mainBuffer.update()
+		self.mainBuffer.restoreWindow()
+		if scrollTo is not None:
+			self.scrollToCursorOrSelection(scrollTo)
+		if self.buffer is self.mainBuffer:
+			self.update()
+		elif (
+			self.buffer is self.messageBuffer
+			and keyboardHandler.keyCounter > self._keyCountForLastMessage
 		):
-			# Check focusToHardLeft for every region.
-			# If noone of the regions has focusToHardLeft set to True, set it for the first focus region.
-			if region.focusToHardLeft:
-				focusToHardLeftSet = True
-			elif not focusToHardLeftSet and getattr(region, "_focusAncestorIndex", None) is None:
-				# Going to display a new object with the same ancestry as the previously displayed object.
-				# So, set focusToHardLeft on this region
-				# For example, this applies when you are in a list and start navigating through it
-				region.focusToHardLeft = True
-				focusToHardLeftSet = True
-		self.mainBuffer.regions.append(region)
-	self.mainBuffer.update()
-	# Last region should receive focus.
-	self.mainBuffer.focus(region)
-	self.scrollToCursorOrSelection(region)
-	if self.buffer is self.mainBuffer:
-		self.update()
-	elif self.buffer is self.messageBuffer and keyboardHandler.keyCounter>self._keyCountForLastMessage:
-		self._dismissMessage()
+			self._dismissMessage()
+	finally:
+		self._regionsPendingUpdate.clear()
 
+	region = scrollTo
 	if config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto" and CJK["previousRawText"] == region.rawText and CJK["previousCursorPos"] != region.cursorPos:
 		#The cursor is inside the raw text of the previous region and its position as moved, so display the character descriptions.
 		try:
@@ -301,11 +313,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		CJK["previousCursorPos"] = -1	#Stores the position of the cursor before the last cursor move.
 
 		self.default_getSpellingSpeech = speech.getSpellingSpeech
-		self.default_doNewObject = BrailleHandler._doNewObject
+		self.default_handlePendingUpdate = BrailleHandler._handlePendingUpdate
 		self.default_reportNewText = InputComposition.reportNewText
 
 		speech.getSpellingSpeech = custom_getSpellingSpeech
-		BrailleHandler._doNewObject = custom_doNewObject
+		BrailleHandler._handlePendingUpdate = customer_handlePendingUpdate
 		InputComposition.reportNewText = custom_reportNewText
 
 	@script(
