@@ -31,6 +31,8 @@
 # Upgrading to compatible with NVDA 2023.1 by Tseng Woody <tsengwoody.tw@gmail.com>
 # version 1.7.1
 # Fixing the initial config bug
+# version 1.8
+# Upgrading to compatible with NVDA 2023.1 by Tseng Woody <tsengwoody.tw@gmail.com>
 
 
 import addonHandler
@@ -39,6 +41,9 @@ import braille
 from braille import BrailleHandler, handler
 import characterProcessing
 import config
+from config.configFlags import (
+	TetherTo,
+)
 import controlTypes
 import globalPluginHandler
 import keyboardHandler
@@ -169,22 +174,29 @@ def custom_getSpellingSpeech(  # noqa: C901
 		yield EndUtteranceCommand()
 
 
-def custom_doCursorMove(self, region):
-	"""
-	This is derived from BrailleHandler._doCursorMove to handle the Braille review behavior.
-	When the cursor is moved to a new raw text region, the region is displayed in Braille.
-	Once the cursor is moved with left and right arrow, the character descriptions  are displayed for each character at the cursor position.
-	@param self: the instance of BrailleHandler currently initialized
-	@type self: braille.BrailleHandler
-	@param region: the region of Braille displayed
-	@type region: braille.Region
-	"""
-	self.mainBuffer.saveWindow()
-	region.update()
+def custom_doNewObject(self, regions):
+	self.mainBuffer.clear()
+	focusToHardLeftSet = False
+	for region in regions:
+		if (
+			self.getTether() == TetherTo.FOCUS.value
+			and config.conf["braille"]["focusContextPresentation"] == CONTEXTPRES_CHANGEDCONTEXT
+		):
+			# Check focusToHardLeft for every region.
+			# If noone of the regions has focusToHardLeft set to True, set it for the first focus region.
+			if region.focusToHardLeft:
+				focusToHardLeftSet = True
+			elif not focusToHardLeftSet and getattr(region, "_focusAncestorIndex", None) is None:
+				# Going to display a new object with the same ancestry as the previously displayed object.
+				# So, set focusToHardLeft on this region
+				# For example, this applies when you are in a list and start navigating through it
+				region.focusToHardLeft = True
+				focusToHardLeftSet = True
+		self.mainBuffer.regions.append(region)
 	self.mainBuffer.update()
-	self.mainBuffer.restoreWindow()
-	if region.brailleCursorPos is not None:
-		self.mainBuffer.scrollTo(region, region.brailleCursorPos)
+	# Last region should receive focus.
+	self.mainBuffer.focus(region)
+	self.scrollToCursorOrSelection(region)
 	if self.buffer is self.mainBuffer:
 		self.update()
 	elif self.buffer is self.messageBuffer and keyboardHandler.keyCounter>self._keyCountForLastMessage:
@@ -203,6 +215,7 @@ def custom_doCursorMove(self, region):
 		#This region has a new raw text, so store the raw text for subsequent comparison.
 		CJK["previousRawText"] = region.rawText
 	CJK["previousCursorPos"] = region.cursorPos
+
 
 def custom_reportNewText(self,oldString,newString):
 	if (config.conf["keyboard"]["speakTypedCharacters"] or config.conf["keyboard"]["speakTypedWords"]):
@@ -277,7 +290,6 @@ def speechReview_getCharacterDescription(locale, character):
 	return currentDesc
 
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
-
 	def __init__(self):
 		super().__init__()
 		CJK["locale"] = _(getLanguage())	#Stores the locale of NVDA.
@@ -289,11 +301,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		CJK["previousCursorPos"] = -1	#Stores the position of the cursor before the last cursor move.
 
 		self.default_getSpellingSpeech = speech.getSpellingSpeech
-		self.default_doCursorMove = BrailleHandler._doCursorMove
+		self.default_doNewObject = BrailleHandler._doNewObject
 		self.default_reportNewText = InputComposition.reportNewText
 
 		speech.getSpellingSpeech = custom_getSpellingSpeech
-		BrailleHandler._doCursorMove = custom_doCursorMove
+		BrailleHandler._doNewObject = custom_doNewObject
 		InputComposition.reportNewText = custom_reportNewText
 
 	@script(
