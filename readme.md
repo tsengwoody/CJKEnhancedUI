@@ -1,10 +1,10 @@
 # CJKEnhancedUI
 
-Version 1.2.1
-
 Customizations and enhancements by Michael M Chen <nvda.conceptsphere@gmail.com>
 
 Tested by 蔡宗豪 Victor Cai <surfer0627@gmail.com>
+
+Maintained by Tseng Woody <tsengwoody.tw@gmail.com> (from version 1.2.1).
 
 A global plug-in intended for the CJK locales
 
@@ -37,3 +37,13 @@ For "On" and "Auto" mode, typing into the input composition window automatically
 v1.2.1: Fix bug(Pressing numPad2 can't speak current character) by Tseng Woody.
 
 v1.3: Upgrading to compatible with NVDA 2019.3 and Python 3 by Tseng Woody.
+
+v 1.8
+
+1. Compatible with NVDA 2023.3
+2. Fixed an issue where, when speech review mode/braille review mode is off, it does not revert to NVDA's original behavior, such as pressing numpad2 three times not announcing the unicode encoding.
+3. Adjusted the names for speech review/braille review toggle.
+
+1. 相容性更新至 NVDA 2023.3
+2. 修正語音檢視模式/點字檢視模式 off 時，不是 NVDA 原本的行為，例如按 3 下 numpad2 語音/點字不會讀出 unicode 編碼	
+3. 語音檢視/點字檢視開關名稱調整

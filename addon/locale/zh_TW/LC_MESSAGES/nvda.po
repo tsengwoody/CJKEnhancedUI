@@ -5,10 +5,10 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: 'CJKEnhancedUI' '1.7'\n"
+"Project-Id-Version: 'CJKEnhancedUI' '1.8'\n"
 "Report-Msgid-Bugs-To: 'nvda-translations@groups.io'\n"
-"POT-Creation-Date: 2023-03-28 09:46+0800\n"
-"PO-Revision-Date: 2023-03-28 09:50+0800\n"
+"POT-Creation-Date: 2023-11-08 23:10+0800\n"
+"PO-Revision-Date: 2023-11-08 23:12+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: zh_TW\n"
@@ -16,66 +16,80 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
-"X-Generator: Poedit 3.2.2\n"
+"X-Generator: Poedit 3.4\n"
 "X-Poedit-Basepath: addon\n"
 "X-Poedit-SearchPath-0: .\n"
 
 #. Translators: This is spoken when NVDA moves to an empty line.
-#: addon\globalPlugins\cjkEnhancedUI.py:95
+#: addon\globalPlugins\cjkEnhancedUI.py:120
 msgid "blank"
 msgstr "空白"
 
-#. Translators: cap will be spoken before the given letter when it is capitalized.
-#: addon\globalPlugins\cjkEnhancedUI.py:145
-#, python-format
-msgid "cap %s"
-msgstr "cap %s"
-
-#: addon\globalPlugins\cjkEnhancedUI.py:294
+#: addon\globalPlugins\cjkEnhancedUI.py:351
 msgid "Toggle on or off the CJK enhanced UI speech review mode."
 msgstr "打開或關閉 CJK enhanced UI 語音檢閱模式。"
 
-#: addon\globalPlugins\cjkEnhancedUI.py:302
+#: addon\globalPlugins\cjkEnhancedUI.py:357
+#: addon\globalPlugins\cjkEnhancedUI.py:360
 #, python-format
 msgid "Speech review mode %s"
 msgstr "語音檢視模式 %s"
 
-#: addon\globalPlugins\cjkEnhancedUI.py:306
+#: addon\globalPlugins\cjkEnhancedUI.py:357
+#: addon\globalPlugins\cjkEnhancedUI.py:370
+msgid "On"
+msgstr "開"
+
+#: addon\globalPlugins\cjkEnhancedUI.py:360
+#: addon\globalPlugins\cjkEnhancedUI.py:376
+msgid "Off"
+msgstr "關"
+
+#: addon\globalPlugins\cjkEnhancedUI.py:364
 msgid "Toggle the Braille review mode between Review, Auto, and Off."
 msgstr "在 Review, Auto, 和 Off 之間切換點字檢閱模式。"
 
-#: addon\globalPlugins\cjkEnhancedUI.py:316
+#: addon\globalPlugins\cjkEnhancedUI.py:370
+#: addon\globalPlugins\cjkEnhancedUI.py:373
+#: addon\globalPlugins\cjkEnhancedUI.py:376
 #, python-format
 msgid "Braille review mode %s"
 msgstr "點字檢閱模式 %s"
 
-#: addon\globalPlugins\cjkEnhancedUI.py:320
+#: addon\globalPlugins\cjkEnhancedUI.py:373
+msgid "Auto"
+msgstr "自動"
+
+#. Translators: Input help mode message for move review cursor to previous character command.
+#: addon\globalPlugins\cjkEnhancedUI.py:381
 msgid ""
 "Moves the review cursor to the previous character of the current navigator "
 "object and speaks it"
 msgstr "檢閱游標移到導航器物件的前一個字元，並讀出"
 
-#: addon\globalPlugins\cjkEnhancedUI.py:332
+#. Translators: a message reported when review cursor is at the leftmost character of the current navigator object's text.
+#: addon\globalPlugins\cjkEnhancedUI.py:395
 msgid "Left"
 msgstr "到了左端"
 
-#: addon\globalPlugins\cjkEnhancedUI.py:357
+#: addon\globalPlugins\cjkEnhancedUI.py:426
 msgid ""
 "Moves the review cursor to the next character of the current navigator "
 "object and speaks it"
 msgstr "檢閱游標移到導航器物件的後一個字元，並讀出"
 
-#: addon\globalPlugins\cjkEnhancedUI.py:369
+#. Translators: a message reported when review cursor is at the rightmost character of the current navigator object's text.
+#: addon\globalPlugins\cjkEnhancedUI.py:438
 msgid "Right"
 msgstr "到了右端"
 
-#: addon\globalPlugins\cjkEnhancedUI.py:394
+#: addon\globalPlugins\cjkEnhancedUI.py:469
 msgid ""
 "Enumerates in forward order through the list of character descriptions in "
 "the dictionary."
 msgstr "按正向順序枚舉自詞解釋字典。"
 
-#: addon\globalPlugins\cjkEnhancedUI.py:437
+#: addon\globalPlugins\cjkEnhancedUI.py:521
 msgid ""
 "Enumerates in reverse order through the list of character descriptions in "
 "the dictionary."
@@ -95,6 +109,10 @@ msgid ""
 "Modifications and enhancements to speech and Braille output intended for CJK "
 "locales."
 msgstr "針對 CJK 文字的語音和點字輸出修改和增強。"
+
+#, python-format
+#~ msgid "cap %s"
+#~ msgstr "cap %s"
 
 #~ msgid "left"
 #~ msgstr "左"

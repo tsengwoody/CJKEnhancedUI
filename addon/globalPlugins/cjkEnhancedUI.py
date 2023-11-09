@@ -1,22 +1,22 @@
-﻿#CJKEnhancedUI.py
-#Version 1.5
-#Customizations and enhancements by Michael M Chen <nvda.conceptsphere@gmail.com>
-#Tested by 蔡宗豪 Victor Cai <surfer0627@gmail.com>
-#A global plug-in intended for the CJK locales
-#Utilizing the character processing framework, several enhancements are implemented for a more user friendly experience.
-#Speech review mode and Braille review mode can be toggled independently with NVDA+0 and NVDA+=(equals) respectively.
-#Summary of the speech review mode
-#Moving the system or review cursor automatically speaks the first character description for non English characters.
-#Pressing numpad2 [or NVDA+.(dot) for laptop] speaks the next character description.
-#Pressing Shift+numPad2 or NVDA+Shift+,(comma) for laptop speaks the previous character description.
-#Typing into the input composition window automatically speaks the first character description for single characters.
-#Summary of the Braille review mode
-#There are three modes: "Off", "On", and "Auto".
-#Braille review mode off: performs default Braille display behavior.
-#Braille review mode on: pressing numpad2 [or nvda+.(dot)] displays the character descriptions.
-#Braille review mode auto: moving the system or review cursor within a region  of text automatically displays the character descriptions.
-#For "On" and "Auto" mode, typing into the input composition window automatically displays character descriptions for single characters.
-#####
+﻿# CJKEnhancedUI.py
+# Version 1.5
+# Customizations and enhancements by Michael M Chen <nvda.conceptsphere@gmail.com>
+# Tested by 蔡宗豪 Victor Cai <surfer0627@gmail.com>
+# A global plug-in intended for the CJK locales
+# Utilizing the character processing framework, several enhancements are implemented for a more user friendly experience.
+# Speech review mode and Braille review mode can be toggled independently with NVDA+0 and NVDA+=(equals) respectively.
+# Summary of the speech review mode
+# Moving the system or review cursor automatically speaks the first character description for non English characters.
+# Pressing numpad2 [or NVDA+.(dot) for laptop] speaks the next character description.
+# Pressing Shift+numPad2 or NVDA+Shift+,(comma) for laptop speaks the previous character description.
+# Typing into the input composition window automatically speaks the first character description for single characters.
+# Summary of the Braille review mode
+# There are three modes: "Off", "On", and "Auto".
+# Braille review mode off: performs default Braille display behavior.
+# Braille review mode on: pressing numpad2 [or nvda+.(dot)] displays the character descriptions.
+# Braille review mode auto: moving the system or review cursor within a region  of text automatically displays the character descriptions.
+# For "On" and "Auto" mode, typing into the input composition window automatically displays character descriptions for single characters.
+# ==========
 # version 1.3
 # Upgrading to compatible with NVDA 2019.3 and Python 3 by Tseng Woody <tsengwoody.tw@gmail.com>
 #####
@@ -38,28 +38,29 @@
 import addonHandler
 import api
 import braille
-from braille import BrailleHandler, handler, CONTEXTPRES_CHANGEDCONTEXT, TextInfoRegion
+from braille import BrailleHandler, handler, TextInfoRegion
 import characterProcessing
 import config
-from config.configFlags import (
-	TetherTo,
-)
 import controlTypes
+import inputCore
 import globalPluginHandler
 import keyboardHandler
 from languageHandler import getLanguage
 from logHandler import log
 from NVDAObjects.inputComposition import InputComposition, calculateInsertedChars
 import queueHandler
+import scriptHandler
 from scriptHandler import getLastScriptRepeatCount, script
 from speech import getCurrentLanguage, LANGS_WITH_CONJUNCT_CHARS, speech
-from speech.commands import *
+from speech.commands import EndUtteranceCommand, LangChangeCommand
 import synthDriverHandler
 import textInfos
 import ui
+from utils.security import objectBelowLockScreenAndWindowsIsLocked
 
 import re
 from typing import (
+	Generator,
 	Optional,
 )
 
@@ -74,7 +75,8 @@ config.conf.spec["CJKEnhancedUI"] = {
 
 CJK = {}
 
-pattern=re.compile("[a-zA-z]")
+pattern = re.compile("[a-zA-z]")
+
 
 def isAlphanumeric(char):
 	"""
@@ -94,11 +96,21 @@ def isAlphanumeric(char):
 		return False
 
 
-def custom_getSpellingSpeech(  # noqa: C901
+def _getSpellingSpeechWithoutCharMode(
 		text: str,
-		locale: Optional[str] = None,
-		useCharacterDescriptions: bool = False
-):
+		locale: str,
+		useCharacterDescriptions: bool,
+		sayCapForCapitals: bool,
+		capPitchChange: int,
+		beepForCapitals: bool,
+		fallbackToCharIfNoDescription: bool = True,
+) -> Generator[speech.SequenceItemT, None, None]:
+	"""
+	@param fallbackToCharIfNoDescription: Only applies if useCharacterDescriptions is True.
+	If fallbackToCharIfNoDescription is True, and no character description is found,
+	the character itself will be announced. Otherwise, nothing will be spoken.
+	"""
+	
 	defaultLanguage=getCurrentLanguage()
 	if not locale or (not config.conf['speech']['autoDialectSwitching'] and locale.split('_')[0]==defaultLanguage.split('_')[0]):
 		locale=defaultLanguage
@@ -110,11 +122,7 @@ def custom_getSpellingSpeech(  # noqa: C901
 	if not text.isspace():
 		text=text.rstrip()
 
-	synth = synthDriverHandler.getSynth()
-	synthConfig=config.conf["speech"][synth.name]
-	charMode = False
 	textLength=len(text)
-	count = 0
 	localeHasConjuncts = True if locale.split('_',1)[0] in LANGS_WITH_CONJUNCT_CHARS else False
 	charDescList = getCharDescListFromText(text,locale) if localeHasConjuncts else text
 	for item in charDescList:
@@ -137,7 +145,7 @@ def custom_getSpellingSpeech(  # noqa: C901
 					CJK["previousCharacter"] = ""
 				elif config.conf["CJKEnhancedUI"]["speechReview"] == "On":
 					#Retrieve the character description one at a time.
-					charDesc=speechReview_getCharacterDescription(locale, speakCharAs.lower())
+					charDesc = speechReview_getCharacterDescription(locale, speakCharAs.lower())
 
 			if charDesc and config.conf["CJKEnhancedUI"]["speechReview"] == "On":
 				speakCharAs = "".join(charDesc)
@@ -151,28 +159,44 @@ def custom_getSpellingSpeech(  # noqa: C901
 		# if useCharacterDescriptions and charDesc:
 			# IDEOGRAPHIC_COMMA = u"\u3001"
 			# speakCharAs=charDesc[0] if textLength>1 else IDEOGRAPHIC_COMMA.join(charDesc)
+		# elif useCharacterDescriptions and not charDesc and not fallbackToCharIfNoDescription:
+			# return None
 		# else:
-			# speakCharAs=characterProcessing.processSpeechSymbol(locale,speakCharAs)'''
-		if uppercase and synthConfig["sayCapForCapitals"]:
-			# Translators: cap will be spoken before the given letter when it is capitalized.
-			speakCharAs=_("cap %s")%speakCharAs
-		if uppercase and synth.isSupported("pitch") and synthConfig["capPitchChange"]:
-			yield PitchCommand(offset=synthConfig["capPitchChange"])
+			# speakCharAs=characterProcessing.processSpeechSymbol(locale,speakCharAs)
 		if config.conf['speech']['autoLanguageSwitching']:
 			yield LangChangeCommand(locale)
-		if len(speakCharAs) == 1 and synthConfig["useSpellingFunctionality"]:
-			if not charMode:
-				yield CharacterModeCommand(True)
-				charMode = True
-		elif charMode:
-			yield CharacterModeCommand(False)
-			charMode = False
-		if uppercase and  synthConfig["beepForCapitals"]:
-			yield BeepCommand(2000, 50)
-		yield speakCharAs
-		if uppercase and synth.isSupported("pitch") and synthConfig["capPitchChange"]:
-			yield PitchCommand()
+		yield from speech._getSpellingCharAddCapNotification(
+			speakCharAs,
+			uppercase and sayCapForCapitals,
+			capPitchChange if uppercase else 0,
+			uppercase and beepForCapitals,
+		)
 		yield EndUtteranceCommand()
+
+
+def custom_getSpellingSpeech(
+		text: str,
+		locale: Optional[str] = None,
+		useCharacterDescriptions: bool = False
+) -> Generator[speech.SequenceItemT, None, None]:
+	synth = synthDriverHandler.getSynth()
+	synthConfig = config.conf["speech"][synth.name]
+	
+	if synth.isSupported("pitch"):
+		capPitchChange = synthConfig["capPitchChange"]
+	else:
+		capPitchChange = 0
+	seq = _getSpellingSpeechWithoutCharMode(
+		text,
+		locale,
+		useCharacterDescriptions,
+		sayCapForCapitals=synthConfig["sayCapForCapitals"],
+		capPitchChange=capPitchChange,
+		beepForCapitals=synthConfig["beepForCapitals"],
+	)
+	if synthConfig["useSpellingFunctionality"]:
+		seq = speech._getSpellingSpeechAddCharMode(seq)
+	yield from seq
 
 
 def customer_handlePendingUpdate(self):
@@ -213,7 +237,7 @@ def customer_handlePendingUpdate(self):
 	finally:
 		self._regionsPendingUpdate.clear()
 
-	region = scrollTo
+	region = scrollTo if scrollTo else region
 	if config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto" and CJK["previousRawText"] == region.rawText and CJK["previousCursorPos"] != region.cursorPos:
 		#The cursor is inside the raw text of the previous region and its position as moved, so display the character descriptions.
 		try:
@@ -222,7 +246,7 @@ def customer_handlePendingUpdate(self):
 			charDesc = characterProcessing.getCharacterDescription(CJK["locale"], char.lower())
 			BrailleHandler.message(handler, char+" "+" ".join(charDesc))
 		except TypeError:
-			BrailleHandler.message(handler, char)
+			pass
 	else:
 		#This region has a new raw text, so store the raw text for subsequent comparison.
 		CJK["previousRawText"] = region.rawText
@@ -248,6 +272,7 @@ def custom_reportNewText(self,oldString,newString):
 			queueHandler.queueFunction(queueHandler.eventQueue, ui.reviewMessage, newSpeechText)
 		elif newText:
 			queueHandler.queueFunction(queueHandler.eventQueue,speech.speakText,newText,symbolLevel=characterProcessing.SymbolLevel.ALL)
+
 
 def speechReview_getCharacterDescription(locale, character):
 	"""
@@ -301,6 +326,7 @@ def speechReview_getCharacterDescription(locale, character):
 	desc.remove(s)
 	return currentDesc
 
+
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def __init__(self):
 		super().__init__()
@@ -328,9 +354,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def script_ToggleSpeechReview(self,gesture):
 		if config.conf["CJKEnhancedUI"]["speechReview"] == "Off":
 			config.conf["CJKEnhancedUI"]["speechReview"] = "On"
+			ui.message(_("Speech review mode %s")%_("On"))
 		else:
 			config.conf["CJKEnhancedUI"]["speechReview"] = "Off"
-		ui.message(_("Speech review mode %s")%config.conf["CJKEnhancedUI"]["speechReview"])
+			ui.message(_("Speech review mode %s")%_("Off"))
 
 	@script(
 		gestures=["kb:nvda+="],
@@ -340,19 +367,23 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def script_ToggleBrailleReview(self,gesture):
 		if config.conf["CJKEnhancedUI"]["brailleReview"] == "Off":
 			config.conf["CJKEnhancedUI"]["brailleReview"] = "On"
+			ui.message(_("Braille review mode %s")%_("On"))
 		elif config.conf["CJKEnhancedUI"]["brailleReview"] == "On":
 			config.conf["CJKEnhancedUI"]["brailleReview"] = "Auto"
+			ui.message(_("Braille review mode %s")%_("Auto"))
 		else:
 			config.conf["CJKEnhancedUI"]["brailleReview"] = "Off"
-		ui.message(_("Braille review mode %s")%config.conf["CJKEnhancedUI"]["brailleReview"])
+			ui.message(_("Braille review mode %s")%_("Off"))
 
 	@script(
-		gestures=["kb:numPad1", "kb(laptop):nvda+leftarrow"],
-		description=_("Moves the review cursor to the previous character of the current navigator object and speaks it"),
+		description=_(
+			# Translators: Input help mode message for move review cursor to previous character command.
+			"Moves the review cursor to the previous character of the current navigator object and speaks it"
+		),
 		category=ADDON_SUMMARY,
+		gestures=("kb:numpad1", "kb(laptop):NVDA+leftArrow", "ts(text):flickLeft")
 	)
-	def script_modified_reviewPreviousCharacter(self,gesture):
-		#Add character description Braille output to the review character when Braille review mode is set to "Auto".
+	def script_review_previousCharacter(self, gesture: inputCore.InputGesture):
 		lineInfo=api.getReviewPosition().copy()
 		lineInfo.expand(textInfos.UNIT_LINE)
 		charInfo=api.getReviewPosition().copy()
@@ -360,22 +391,29 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		charInfo.collapse()
 		res=charInfo.move(textInfos.UNIT_CHARACTER,-1)
 		if res==0 or charInfo.compareEndPoints(lineInfo,"startToStart")<0:
+			# Translators: a message reported when review cursor is at the leftmost character of the current navigator object's text.
 			ui.reviewMessage(_("Left"))
-			reviewInfo=api.getReviewPosition().copy()
-			reviewInfo.expand(textInfos.UNIT_CHARACTER)
-			speech.speakTextInfo(reviewInfo, unit=textInfos.UNIT_CHARACTER, reason=controlTypes.OutputReason.CARET)
-			char = reviewInfo.text.lower()
-			if not isAlphanumeric(char) and config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto":
-				try:
-					charDesc = characterProcessing.getCharacterDescription(CJK["locale"], char)
-					BrailleHandler.message(handler, char+" "+" ".join(charDesc))
-				except TypeError:
-					pass
+			reviewInfo = api.getReviewPosition().copy()
 		else:
-			api.setReviewPosition(charInfo)
-			charInfo.expand(textInfos.UNIT_CHARACTER)
-			speech.speakTextInfo(charInfo, unit=textInfos.UNIT_CHARACTER, reason=controlTypes.OutputReason.CARET)
-			char = charInfo.text.lower()
+			reviewInfo = charInfo
+			api.setReviewPosition(reviewInfo)
+
+		# This script is available on the lock screen via getSafeScripts, as such
+		# ensure the review position does not contain secure information
+		# before announcing this object
+		if objectBelowLockScreenAndWindowsIsLocked(reviewInfo.obj):
+			ui.reviewMessage(gui.blockAction.Context.WINDOWS_LOCKED.translatedMessage)
+			return
+		else:
+			reviewInfo.expand(textInfos.UNIT_CHARACTER)
+			speech.speakTextInfo(
+				reviewInfo,
+				unit=textInfos.UNIT_CHARACTER,
+				reason=controlTypes.OutputReason.CARET
+			)
+
+			#Add character description Braille output to the review character when Braille review mode is set to "Auto".
+			char = reviewInfo.text.lower()
 			if not isAlphanumeric(char) and config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto":
 				try:
 					charDesc = characterProcessing.getCharacterDescription(CJK["locale"], char)
@@ -388,8 +426,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		description=_("Moves the review cursor to the next character of the current navigator object and speaks it"),
 		category=ADDON_SUMMARY,
 	)
-	def script_modified_review_nextCharacter(self,gesture):
-		#Add character description Braille output to the review character when Braille review mode is turned on.
+	def script_review_nextCharacter(self, gesture: inputCore.InputGesture):
 		lineInfo=api.getReviewPosition().copy()
 		lineInfo.expand(textInfos.UNIT_LINE)
 		charInfo=api.getReviewPosition().copy()
@@ -397,22 +434,29 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		charInfo.collapse()
 		res=charInfo.move(textInfos.UNIT_CHARACTER,1)
 		if res==0 or charInfo.compareEndPoints(lineInfo,"endToEnd")>=0:
+			# Translators: a message reported when review cursor is at the rightmost character of the current navigator object's text.
 			ui.reviewMessage(_("Right"))
-			reviewInfo=api.getReviewPosition().copy()
-			reviewInfo.expand(textInfos.UNIT_CHARACTER)
-			speech.speakTextInfo(reviewInfo, unit=textInfos.UNIT_CHARACTER, reason=controlTypes.OutputReason.CARET)
-			char = reviewInfo.text.lower()
-			if not isAlphanumeric(char) and config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto":
-				try:
-					charDesc = characterProcessing.getCharacterDescription(CJK["locale"], char)
-					BrailleHandler.message(handler, char+" "+" ".join(charDesc))
-				except TypeError:
-					pass
+			reviewInfo = api.getReviewPosition().copy()
 		else:
-			api.setReviewPosition(charInfo)
-			charInfo.expand(textInfos.UNIT_CHARACTER)
-			speech.speakTextInfo(charInfo, unit=textInfos.UNIT_CHARACTER, reason=controlTypes.OutputReason.CARET)
-			char = charInfo.text.lower()
+			reviewInfo = charInfo
+			api.setReviewPosition(reviewInfo)
+
+		# This script is available on the lock screen via getSafeScripts, as such
+		# ensure the review position does not contain secure information
+		# before announcing this object
+		if objectBelowLockScreenAndWindowsIsLocked(reviewInfo.obj):
+			ui.reviewMessage(gui.blockAction.Context.WINDOWS_LOCKED.translatedMessage)
+			return
+		else:
+			reviewInfo.expand(textInfos.UNIT_CHARACTER)
+			speech.speakTextInfo(
+				reviewInfo,
+				unit=textInfos.UNIT_CHARACTER,
+				reason=controlTypes.OutputReason.CARET
+			)
+
+			#Add character description Braille output to the review character when Braille review mode is set to "Auto".
+			char = reviewInfo.text.lower()
 			if not isAlphanumeric(char) and config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto":
 				try:
 					charDesc = characterProcessing.getCharacterDescription(CJK["locale"], char)
@@ -426,42 +470,51 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		category=ADDON_SUMMARY,
 	)
 	def script_forward_review_currentCharacter(self,gesture):
-		#When speech review mode is enabled, the first character description is spoken on first script call.
-		#When Braille review mode is set to "On" or "Auto", character descriptions are displayed on the first script call.
-		CJK["direction"]=1
 		info=api.getReviewPosition().copy()
+		# This script is available on the lock screen via getSafeScripts, as such
+		# ensure the review position does not contain secure information
+		# before announcing this object
+		if objectBelowLockScreenAndWindowsIsLocked(info.obj):
+			ui.reviewMessage(gui.blockAction.Context.WINDOWS_LOCKED.translatedMessage)
+			return
+
 		info.expand(textInfos.UNIT_CHARACTER)
-		count = getLastScriptRepeatCount()
+		# Explicitly tether here
+		braille.handler.handleReviewMove(shouldAutoTether=True)
+		scriptCount=scriptHandler.getLastScriptRepeatCount()
 
-		try:
-			c = ord(info.text)
-		except:
-			c=0
-
-		if count == 1 or (config.conf["CJKEnhancedUI"]["speechReview"] == "On" or config.conf["CJKEnhancedUI"]["brailleReview"] != "Off"):
-			CJK["isReviewCharacter"] = True
-			if count == 1 or config.conf["CJKEnhancedUI"]["speechReview"] == "On":
-				speech.speakSpelling(info.text,useCharacterDescriptions=True)
-			else:
-				speech.speakTextInfo(info, unit=textInfos.UNIT_CHARACTER, reason=controlTypes.OutputReason.CARET)
-			if config.conf["CJKEnhancedUI"]["brailleReview"] == "On" or config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto":
-				try:
-					char = info.text.lower()
-					charDesc = characterProcessing.getCharacterDescription(CJK["locale"], char)
-					BrailleHandler.message(handler, char+" "+" ".join(charDesc))
-				except TypeError:
-					pass
-		elif count == 0:
-			speech.speakTextInfo(info, unit=textInfos.UNIT_CHARACTER, reason=controlTypes.OutputReason.CARET)
-		else:
+		if config.conf["CJKEnhancedUI"]["brailleReview"] == "On" or config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto":
 			try:
-				speech.speakMessage("%d," % c)
-				speech.speakSpelling(hex(c))
-			except:
+				char = info.text.lower()
+				charDesc = characterProcessing.getCharacterDescription(CJK["locale"], char)
+				BrailleHandler.message(handler, char+" "+" ".join(charDesc))
+			except TypeError:
+				pass
+
+		if config.conf["CJKEnhancedUI"]["speechReview"] == "On":
+			CJK["direction"] = 1
+			CJK["isReviewCharacter"] = True
+			speech.spellTextInfo(info,useCharacterDescriptions=True)
+			CJK["direction"] = 0
+			CJK["isReviewCharacter"] = False
+		else:
+			if scriptCount==0:
 				speech.speakTextInfo(info, unit=textInfos.UNIT_CHARACTER, reason=controlTypes.OutputReason.CARET)
-		#Reset parameters to prepare for the next call.
-		CJK["direction"] = 0
-		CJK["isReviewCharacter"] = False
+			elif scriptCount==1:
+				speech.spellTextInfo(info,useCharacterDescriptions=True)
+			else:
+				try:
+					c = ord(info.text)
+				except TypeError:
+					c = None
+				if c is not None:
+					speech.speakMessage("%d," % c)
+					speech.speakSpelling(hex(c))
+					if not(config.conf["CJKEnhancedUI"]["brailleReview"] == "On" or config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto"):
+						braille.handler.message(f"{c}, {hex(c)}")
+				else:
+					log.debugWarning("Couldn't calculate ordinal for character %r" % info.text)
+					speech.speakTextInfo(info, unit=textInfos.UNIT_CHARACTER, reason=controlTypes.OutputReason.CARET)
 
 	@script(
 		gestures=["kb:Shift+numPad2", "kb(laptop):NVDA+Shift+."],
@@ -469,16 +522,16 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		category=ADDON_SUMMARY,
 	)
 	def script_reverse_review_currentCharacter(self,gesture):
-		CJK["direction"] = -1
-		CJK["isReviewCharacter"] = True
 		info=api.getReviewPosition().copy()
 		info.expand(textInfos.UNIT_CHARACTER)
-		speech.speakSpelling(info.text,useCharacterDescriptions=True)
+		CJK["direction"] = -1
+		CJK["isReviewCharacter"] = True
+		speech.spellTextInfo(info,useCharacterDescriptions=True)
 		CJK["direction"] = 0
 		CJK["isReviewCharacter"] = False
 
 	def terminate(self):
 		speech.getSpellingSpeech = self.default_getSpellingSpeech
-		BrailleHandler._doCursorMove = self.default_doCursorMove
+		BrailleHandler._handlePendingUpdate = self.default_handlePendingUpdate
 		InputComposition.reportNewText = self.default_reportNewText
 		super().terminate()
