@@ -104,11 +104,14 @@ def _getSpellingSpeechWithoutCharMode(
 		capPitchChange: int,
 		beepForCapitals: bool,
 		fallbackToCharIfNoDescription: bool = True,
+		endsUtterance: bool = True,
 ) -> Generator[speech.SequenceItemT, None, None]:
 	"""
 	@param fallbackToCharIfNoDescription: Only applies if useCharacterDescriptions is True.
 	If fallbackToCharIfNoDescription is True, and no character description is found,
 	the character itself will be announced. Otherwise, nothing will be spoken.
+	@param endsUtterance: Whether an EndUtteranceCommand should be yielded after each character.
+	NVDA 2026.2 and later pass endsUtterance=False when spelling a selection change.
 	"""
 	
 	defaultLanguage=getCurrentLanguage()
@@ -171,13 +174,16 @@ def _getSpellingSpeechWithoutCharMode(
 			capPitchChange if uppercase else 0,
 			uppercase and beepForCapitals,
 		)
-		yield EndUtteranceCommand()
+		if endsUtterance:
+			yield EndUtteranceCommand()
 
 
 def custom_getSpellingSpeech(
 		text: str,
 		locale: Optional[str] = None,
-		useCharacterDescriptions: bool = False
+		useCharacterDescriptions: bool = False,
+		endsUtterance: bool = True,
+		useCharMode: bool = True,
 ) -> Generator[speech.SequenceItemT, None, None]:
 	synth = synthDriverHandler.getSynth()
 	synthConfig = config.conf["speech"][synth.name]
@@ -193,8 +199,9 @@ def custom_getSpellingSpeech(
 		sayCapForCapitals=synthConfig["sayCapForCapitals"],
 		capPitchChange=capPitchChange,
 		beepForCapitals=synthConfig["beepForCapitals"],
+		endsUtterance=endsUtterance,
 	)
-	if synthConfig["useSpellingFunctionality"]:
+	if useCharMode and synthConfig["useSpellingFunctionality"]:
 		seq = speech._getSpellingSpeechAddCharMode(seq)
 	yield from seq
 
