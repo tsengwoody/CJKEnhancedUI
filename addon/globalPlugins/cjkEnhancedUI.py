@@ -226,7 +226,13 @@ def customer_handlePendingUpdate(self):
 		self.mainBuffer.update()
 		self.mainBuffer.restoreWindow()
 		if scrollTo is not None:
-			self.scrollToCursorOrSelection(scrollTo)
+			try:
+				self.scrollToCursorOrSelection(scrollTo)
+			except LookupError:
+				log.debugWarning(
+					f"scrollToCursorOrSelection failed for {scrollTo}",
+					exc_info=True
+				)
 		if self.buffer is self.mainBuffer:
 			self.update()
 		elif (
