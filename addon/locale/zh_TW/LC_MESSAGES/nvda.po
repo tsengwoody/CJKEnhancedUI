@@ -5,10 +5,10 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: 'CJKEnhancedUI' '1.8'\n"
+"Project-Id-Version: 'CJKEnhancedUI' '1.10'\n"
 "Report-Msgid-Bugs-To: 'nvda-translations@groups.io'\n"
-"POT-Creation-Date: 2023-11-08 23:10+0800\n"
-"PO-Revision-Date: 2023-11-08 23:12+0800\n"
+"POT-Creation-Date: 2026-05-07 07:49+0800\n"
+"PO-Revision-Date: 2026-05-07 07:59+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: zh_TW\n"
@@ -16,7 +16,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
-"X-Generator: Poedit 3.4\n"
+"X-Generator: Poedit 3.9\n"
 "X-Poedit-Basepath: addon\n"
 "X-Poedit-SearchPath-0: .\n"
 
@@ -95,20 +95,26 @@ msgid ""
 "the dictionary."
 msgstr "按反向順序枚舉自詞解釋字典。"
 
-#. Add-on summary, usually the user visible name of the addon.
-#. Translators: Summary for this add-on
-#. to be shown on installation and add-on information found in Add-ons Manager.
-#: buildVars.py:23
+#. Add-on summary/title, usually the user visible name of the add-on
+#. Translators: Summary/title for this add-on
+#. to be shown on installation and add-on information found in add-on store
+#: buildVars.py:20
 msgid "CJK Enhanced User Interface"
 msgstr "CJK Enhanced User Interface"
 
 #. Add-on description
-#. Translators: Long description to be shown for this add-on on add-on information from add-ons manager
-#: buildVars.py:26
+#. Translators: Long description to be shown for this add-on on add-on information from add-on store
+#: buildVars.py:23
 msgid ""
 "Modifications and enhancements to speech and Braille output intended for CJK "
 "locales."
 msgstr "針對 CJK 文字的語音和點字輸出修改和增強。"
+
+#. Brief changelog for this version
+#. Translators: what's new content for the add-on version to be shown in the add-on store
+#: buildVars.py:28
+msgid "Added support for NVDA 2026"
+msgstr "新增支援 NVDA 2026"
 
 #, python-format
 #~ msgid "cap %s"
