@@ -351,6 +351,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		CJK["previousRawText"] = None	#Stores the raw text of the Braille region before the last cursor move.
 		CJK["previousCursorPos"] = -1	#Stores the position of the cursor before the last cursor move.
 
+		# Keep Braille Review On cycling independent from speech description cycling.
+		self._brailleReviewLastInfo = None
+		self._brailleReviewLastScriptCount = None
+		self._brailleReviewPhase = 0
+
 		self.default_getSpellingSpeech = speech.getSpellingSpeech
 		self.default_handlePendingUpdate = BrailleHandler._handlePendingUpdate
 		self.default_reportNewText = InputComposition.reportNewText
@@ -378,6 +383,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		category=ADDON_SUMMARY,
 	)
 	def script_ToggleBrailleReview(self,gesture):
+		self._brailleReviewLastInfo = None
+		self._brailleReviewLastScriptCount = None
+		self._brailleReviewPhase = 0
 		if config.conf["CJKEnhancedUI"]["brailleReview"] == "Off":
 			config.conf["CJKEnhancedUI"]["brailleReview"] = "On"
 			ui.message(_("Braille review mode %s")%_("On"))
@@ -496,7 +504,45 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		braille.handler.handleReviewMove(shouldAutoTether=True)
 		scriptCount=scriptHandler.getLastScriptRepeatCount()
 
-		if config.conf["CJKEnhancedUI"]["brailleReview"] == "On" or config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto":
+		brailleReviewMode = config.conf["CJKEnhancedUI"]["brailleReview"]
+		if brailleReviewMode == "On":
+			# A consecutive press at the same review position alternates descriptions
+			# and Unicode code points. A new position or gesture sequence starts with descriptions.
+			lastInfo = self._brailleReviewLastInfo
+			try:
+				samePosition = (
+					lastInfo is not None
+					and lastInfo.obj == info.obj
+					and lastInfo.compareEndPoints(info, "startToStart") == 0
+					and lastInfo.compareEndPoints(info, "endToEnd") == 0
+				)
+			except (RuntimeError, ValueError, NotImplementedError, TypeError):
+				samePosition = False
+			continued = (
+				samePosition
+				and self._brailleReviewLastScriptCount is not None
+				and scriptCount == self._brailleReviewLastScriptCount + 1
+			)
+			# Use a local phase to ensure a new position always begins with descriptions.
+			if not continued:
+				self._brailleReviewPhase = 0
+			else:
+				self._brailleReviewPhase = 1 - self._brailleReviewPhase
+			showCodePoints = self._brailleReviewPhase == 1
+			self._brailleReviewLastInfo = info.copy()
+			self._brailleReviewLastScriptCount = scriptCount
+			if showCodePoints:
+				if info.text:
+					braille.handler.message("; ".join(f"{ord(c)}, {hex(ord(c))}" for c in info.text))
+			else:
+				try:
+					char = info.text.lower()
+					charDesc = characterProcessing.getCharacterDescription(CJK["locale"], char)
+					BrailleHandler.message(handler, char + (" " + " ".join(charDesc) if charDesc else ""))
+				except TypeError:
+					pass
+		elif brailleReviewMode == "Auto":
+			# Preserve the existing Auto behavior: descriptions only, never code points.
 			try:
 				char = info.text.lower()
 				charDesc = characterProcessing.getCharacterDescription(CJK["locale"], char)
