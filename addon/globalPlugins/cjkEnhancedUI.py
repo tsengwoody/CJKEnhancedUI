@@ -185,6 +185,28 @@ def custom_getSpellingSpeech(
 		endsUtterance: bool = True,
 		useCharMode: bool = True,
 ) -> Generator[speech.SequenceItemT, None, None]:
+	# NVDA 2026.2 spells one-character selection changes before announcing
+	# "selected" or "unselected".  Do not let CJK speech review expand these
+	# selection messages into character descriptions.
+	# This parameter combination identifies the known NVDA 2026.2 call path;
+	# it is not a general-purpose selection event indicator.
+	if (
+		config.conf["CJKEnhancedUI"]["speechReview"] == "On"
+		and len(text) == 1
+		and not useCharacterDescriptions
+		and not endsUtterance
+		and not useCharMode
+		and not CJK["isReviewCharacter"]
+	):
+		yield from CJK["originalGetSpellingSpeech"](
+			text,
+			locale=locale,
+			useCharacterDescriptions=False,
+			endsUtterance=False,
+			useCharMode=False,
+		)
+		return
+
 	synth = synthDriverHandler.getSynth()
 	synthConfig = config.conf["speech"][synth.name]
 	
@@ -352,6 +374,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		CJK["previousCursorPos"] = -1	#Stores the position of the cursor before the last cursor move.
 
 		self.default_getSpellingSpeech = speech.getSpellingSpeech
+		CJK["originalGetSpellingSpeech"] = self.default_getSpellingSpeech
 		self.default_handlePendingUpdate = BrailleHandler._handlePendingUpdate
 		self.default_reportNewText = InputComposition.reportNewText
 
