@@ -59,10 +59,14 @@ import ui
 from utils.security import objectBelowLockScreenAndWindowsIsLocked
 
 import re
+import time
 from typing import (
 	Generator,
 	Optional,
 )
+
+# Require a quick repeat specifically for braille numeric cycling.
+_BRAILLE_REVIEW_REPEAT_THRESHOLD_MS = 180
 
 addonHandler.initTranslation()
 
@@ -351,6 +355,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		CJK["previousRawText"] = None	#Stores the raw text of the Braille region before the last cursor move.
 		CJK["previousCursorPos"] = -1	#Stores the position of the cursor before the last cursor move.
 
+		# Keep Braille Review On cycling independent from speech description cycling.
+		self._brailleReviewLastInfo = None
+		self._brailleReviewLastScriptCount = None
+		self._brailleReviewPhase = 0
+		self._brailleReviewLastPressTime = None
+
 		self.default_getSpellingSpeech = speech.getSpellingSpeech
 		self.default_handlePendingUpdate = BrailleHandler._handlePendingUpdate
 		self.default_reportNewText = InputComposition.reportNewText
@@ -378,6 +388,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		category=ADDON_SUMMARY,
 	)
 	def script_ToggleBrailleReview(self,gesture):
+		self._brailleReviewLastInfo = None
+		self._brailleReviewLastScriptCount = None
+		self._brailleReviewPhase = 0
+		self._brailleReviewLastPressTime = None
 		if config.conf["CJKEnhancedUI"]["brailleReview"] == "Off":
 			config.conf["CJKEnhancedUI"]["brailleReview"] = "On"
 			ui.message(_("Braille review mode %s")%_("On"))
@@ -483,6 +497,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		category=ADDON_SUMMARY,
 	)
 	def script_forward_review_currentCharacter(self,gesture):
+		# Record the entry time, before review lookup or braille output adds delay.
+		pressTime = time.monotonic()
 		info=api.getReviewPosition().copy()
 		# This script is available on the lock screen via getSafeScripts, as such
 		# ensure the review position does not contain secure information
@@ -496,7 +512,55 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		braille.handler.handleReviewMove(shouldAutoTether=True)
 		scriptCount=scriptHandler.getLastScriptRepeatCount()
 
-		if config.conf["CJKEnhancedUI"]["brailleReview"] == "On" or config.conf["CJKEnhancedUI"]["brailleReview"] == "Auto":
+		brailleReviewMode = config.conf["CJKEnhancedUI"]["brailleReview"]
+		if brailleReviewMode == "On":
+			# A consecutive press at the same review position alternates descriptions
+			# and Unicode code points. A new position or gesture sequence starts with descriptions.
+			lastInfo = self._brailleReviewLastInfo
+			try:
+				samePosition = (
+					lastInfo is not None
+					and lastInfo.obj == info.obj
+					and lastInfo.compareEndPoints(info, "startToStart") == 0
+					and lastInfo.compareEndPoints(info, "endToEnd") == 0
+				)
+			except (RuntimeError, ValueError, NotImplementedError, TypeError):
+				samePosition = False
+			# Only a deliberately quick repeat shows the numeric value.
+			# Keep NVDA's global multiPressTimeout unchanged.
+			lastPressTime = self._brailleReviewLastPressTime
+			intervalMs = (pressTime - lastPressTime) * 1000 if lastPressTime is not None else None
+			repeatCountAdvanced = (
+				self._brailleReviewLastScriptCount is not None
+				and scriptCount == self._brailleReviewLastScriptCount + 1
+			)
+			continued = (
+				samePosition
+				and repeatCountAdvanced
+				and intervalMs is not None
+				and 0 <= intervalMs <= _BRAILLE_REVIEW_REPEAT_THRESHOLD_MS
+			)
+			# Start with descriptions when the repeat sequence breaks.
+			if not continued:
+				self._brailleReviewPhase = 0
+			else:
+				self._brailleReviewPhase = 1 - self._brailleReviewPhase
+			showCodePoints = self._brailleReviewPhase == 1
+			self._brailleReviewLastInfo = info.copy()
+			self._brailleReviewLastScriptCount = scriptCount
+			self._brailleReviewLastPressTime = pressTime
+			if showCodePoints:
+				if info.text:
+					braille.handler.message("; ".join(f"{ord(c)}, {hex(ord(c))}" for c in info.text))
+			else:
+				try:
+					char = info.text.lower()
+					charDesc = characterProcessing.getCharacterDescription(CJK["locale"], char)
+					BrailleHandler.message(handler, char + (" " + " ".join(charDesc) if charDesc else ""))
+				except TypeError:
+					pass
+		elif brailleReviewMode == "Auto":
+			# Preserve the existing Auto behavior: descriptions only, never code points.
 			try:
 				char = info.text.lower()
 				charDesc = characterProcessing.getCharacterDescription(CJK["locale"], char)
