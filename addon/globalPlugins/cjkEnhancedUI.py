@@ -59,10 +59,14 @@ import ui
 from utils.security import objectBelowLockScreenAndWindowsIsLocked
 
 import re
+import time
 from typing import (
 	Generator,
 	Optional,
 )
+
+# Require a quick repeat specifically for braille numeric cycling.
+_BRAILLE_REVIEW_REPEAT_THRESHOLD_MS = 180
 
 addonHandler.initTranslation()
 
@@ -355,6 +359,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._brailleReviewLastInfo = None
 		self._brailleReviewLastScriptCount = None
 		self._brailleReviewPhase = 0
+		self._brailleReviewLastPressTime = None
 
 		self.default_getSpellingSpeech = speech.getSpellingSpeech
 		self.default_handlePendingUpdate = BrailleHandler._handlePendingUpdate
@@ -386,6 +391,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._brailleReviewLastInfo = None
 		self._brailleReviewLastScriptCount = None
 		self._brailleReviewPhase = 0
+		self._brailleReviewLastPressTime = None
 		if config.conf["CJKEnhancedUI"]["brailleReview"] == "Off":
 			config.conf["CJKEnhancedUI"]["brailleReview"] = "On"
 			ui.message(_("Braille review mode %s")%_("On"))
@@ -491,6 +497,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		category=ADDON_SUMMARY,
 	)
 	def script_forward_review_currentCharacter(self,gesture):
+		# Record the entry time, before review lookup or braille output adds delay.
+		pressTime = time.monotonic()
 		info=api.getReviewPosition().copy()
 		# This script is available on the lock screen via getSafeScripts, as such
 		# ensure the review position does not contain secure information
@@ -518,12 +526,21 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				)
 			except (RuntimeError, ValueError, NotImplementedError, TypeError):
 				samePosition = False
-			continued = (
-				samePosition
-				and self._brailleReviewLastScriptCount is not None
+			# Only a deliberately quick repeat shows the numeric value.
+			# Keep NVDA's global multiPressTimeout unchanged.
+			lastPressTime = self._brailleReviewLastPressTime
+			intervalMs = (pressTime - lastPressTime) * 1000 if lastPressTime is not None else None
+			repeatCountAdvanced = (
+				self._brailleReviewLastScriptCount is not None
 				and scriptCount == self._brailleReviewLastScriptCount + 1
 			)
-			# Use a local phase to ensure a new position always begins with descriptions.
+			continued = (
+				samePosition
+				and repeatCountAdvanced
+				and intervalMs is not None
+				and 0 <= intervalMs <= _BRAILLE_REVIEW_REPEAT_THRESHOLD_MS
+			)
+			# Start with descriptions when the repeat sequence breaks.
 			if not continued:
 				self._brailleReviewPhase = 0
 			else:
@@ -531,6 +548,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			showCodePoints = self._brailleReviewPhase == 1
 			self._brailleReviewLastInfo = info.copy()
 			self._brailleReviewLastScriptCount = scriptCount
+			self._brailleReviewLastPressTime = pressTime
 			if showCodePoints:
 				if info.text:
 					braille.handler.message("; ".join(f"{ord(c)}, {hex(ord(c))}" for c in info.text))
